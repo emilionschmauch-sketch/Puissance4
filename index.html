@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Puissance 4 IA</title>
+
+<style>
+/* Style du corps principal */
+body {
+            text-align : center;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #ff1010 0%, #764ba2 100%);
+            font-family: Arial, sans-serif;
+        }
+/* Centrage du plateau de jeu */
+table {
+    margin: 20px auto;
+}
+/* Style des cases du jeu */
+.case {
+    width: 70px;
+    height: 70px;
+    border: 1px solid black;
+    margin: 5px;
+    background: white;
+    cursor: pointer;
+}
+/* Style des boutons */
+button {
+            display: inline-block;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: rgb(233, 199, 4);
+            border: none;
+            border-radius: 5px;
+            
+            }
+        /* Effet de survol sur les boutons */
+        button:hover {
+                transform: scale(1.05);
+                transition: transform 0.2s;
+            }
+/* Classes pour les couleurs des pions */
+.rouge { background: red; }
+.jaune { background: yellow; }
+
+/* Panneau de victoire qui s'affiche en superposition */
+#victoire {
+    position: fixed;
+    width:100%;
+    height:100%;
+    top:0;
+    left:0;
+    display:none;
+    background: rgba(0,0,0,0.6);
+    justify-content:center;
+    align-items:center;
+}
+
+/* Message de victoire au centre */
+#message_victoire {
+    background:white;
+    padding:40px;
+    border-radius:10px;
+    font-size:30px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Puissance 4</h1>
+<h3>Réalisé par Emilion Schmauch</h3>
+<div id="zone_jeu"></div>
+<label>
+    <input type="radio" name="ia" value="joueur" checked onclick="initialisation()">
+    2 joueurs
+</label>
+<label>
+    <input type="radio" name="ia" value="ia" onclick="initialisation()">
+    Joueur vs IA (jusqu'aujourd'hui invaincu)
+</label>
+<div id="qui_commence">
+
+    <label>
+        <input type="radio" name="starter" value="joueur" checked onclick="initialisation()">
+        Joueur commence
+    </label>
+
+    <label>
+        <input type="radio" name="starter" value="ia" onclick="initialisation()">
+        IA commence
+    </label>   
+</div>
+<br>
+<button onclick="initialisation()">Recommencer</button>
+
+<div id="victoire" onclick="this.style.display='none'">
+    <div id="message_victoire"></div>
+</div>
+
+<script>
+
+// Variables globales du jeu
+let tour = "rouge"; // Couleur du joueur actuel
+let joueurIA = "jaune"; // Couleur de l'IA
+let jeuFini = false; // Indicateur de fin de jeu
+let ordre = [4,3,5,2,6,1,7]; // Ordre de priorité des colonnes pour l'IA
+
+
+
+// Lancer le jeu
+initialisation();
+
+// Initialise ou réinitialise le jeu
+function initialisation() { // Fonction qui initialise ou réinitialise le jeu
+    if (document.querySelector('input[name="ia"]:checked').value === "ia"){ // Si l'IA est activée
+    document.getElementById("qui_commence").style.display = "block"; // Afficher la section de choix du starter
+}
+else {
+    document.getElementById("qui_commence").style.display = "none"; // Masquer la section de choix du joueur qui commence
+}
+    jeuFini = false; // Réinitialiser l'indicateur de fin de jeu
+
+    let choix = document.querySelector('input[name="starter"]:checked').value; // Récupérer la valeur du choix du joueur qui commence
+
+    tour = (choix === "ia") ? joueurIA : "rouge"; // Définir le tour initial : IA ou rouge
+
+    document.getElementById("zone_jeu").innerHTML = ""; // Vider le contenu de la zone de jeu
+
+    let table = document.createElement("table"); // Créer un élément table pour le plateau
+
+    for (let i=1;i<=6;i++){ // Boucle pour créer 6 lignes
+        let tr=document.createElement("tr"); // Créer une ligne de table
+
+        for (let j=1;j<=7;j++){ // Boucle pour créer 7 colonnes
+            let td=document.createElement("td"); // Créer une cellule de table
+            td.classList.add("case"); // Ajouter la classe CSS 'case' à la cellule
+            td.id=i+""+j; // Définir l'identifiant unique de la cellule (ligne+colonne)
+            if (document.querySelector('input[name="ia"]:checked').value === "ia"){ // Si le mode IA est activé
+                td.addEventListener("click", jouer_avec_IA); // Ajouter l'événement de clic pour jouer contre l'IA
+            }
+            else {
+                td.addEventListener("click", jouer); // Ajouter l'événement de clic pour jouer en mode 2 joueurs
+            }
+            tr.appendChild(td); // Ajouter la cellule à la ligne
+        }
+
+        table.appendChild(tr); // Ajouter la ligne à la table
+    }
+
+    document.getElementById("zone_jeu").appendChild(table); // Ajouter la table complète à la zone de jeu
+
+    // 👉 SI IA commence, elle joue direct
+    if (tour === joueurIA && document.querySelector('input[name="ia"]:checked').value === "ia"){ // Si c'est le tour de l'IA et le mode IA est activé
+        setTimeout(jouerIA, 300); // Faire jouer l'IA automatiquement après 300 millisecondes
+    }
+}
+
+// Gérer le coup du joueur contre l'IA
+function jouer_avec_IA(e){
+    if (jeuFini || tour===joueurIA) return; // Ignorer si jeu fini ou tour de l'IA
+
+    let col = parseInt(e.target.id[1]); // Extraire le numéro de colonne
+    jouerColonne(col); // Jouer la colonne
+}
+
+
+// Gère le coup d'un joueur en mode 2 joueurs
+function jouer(event) {
+    if (jeuFini) return; // Ignorer si le jeu est fini
+
+    let td = event.target;
+    let col = parseInt(td.id[1]); // Récupérer la colonne
+    let cible = null;
+
+    // Trouver la première case libre en bas de la colonne
+    for (let l = 6; l >= 1; l--) {
+        let cell = document.getElementById(l + "" + col);
+        if (!cell.classList.contains('rouge') && !cell.classList.contains('jaune')) {
+            cible = l;
+            break;
+        }
+    }
+
+    if (cible === null) return; // Colonne pleine, ignorer
+
+    let couleur = tour;
+
+    // Animer la descente du pion et vérifier s'il y a victoire
+    animerDescente(col, couleur, function() {
+        if (!verifier_j()) {
+            // Passer au joueur suivant
+            tour = (couleur === 'rouge') ? 'jaune' : 'rouge';
+        }
+    });
+}
+
+// Vérifie la victoire en mode 2 joueurs
+function verifier_j() {
+
+    // Teste si 4 cases alignées contiennent la même couleur
+    function test(c1, c2, c3, c4) {
+        if (!c1 || !c2 || !c3 || !c4) return false; // Vérifier que toutes les cases existent
+
+        // Vérifier si 4 cases rouges sont alignées
+        if (c1.classList.contains('rouge') &&
+            c2.classList.contains('rouge') &&
+            c3.classList.contains('rouge') &&
+            c4.classList.contains('rouge')) {
+            victoire('Rouge');
+            // Désactiver les clics
+            document.querySelectorAll('.case').forEach(c => c.removeEventListener('click', jouer));
+            return true;
+        }
+
+        // Vérifier si 4 cases jaunes sont alignées
+        if (c1.classList.contains('jaune') &&
+            c2.classList.contains('jaune') &&
+            c3.classList.contains('jaune') &&
+            c4.classList.contains('jaune')) {
+            victoire('Jaune');
+            document.querySelectorAll('.case').forEach(c => c.removeEventListener('click', jouer));
+            return true;
+        }
+
+        return false; // Aucune victoire
+    }
+
+    // Parcourir toutes les cases pour vérifier 4 alignements
+    let cases = document.getElementsByClassName('case');
+
+    for (let i = 0; i < cases.length; i++) {
+        let case1 = cases[i];
+        let l = parseInt(case1.id[0]); // Numéro de ligne
+        let c = parseInt(case1.id[1]); // Numéro de colonne
+
+        // Vérifier vertical (bas)
+        if (test(case1,
+            document.getElementById((l+1)+''+c),
+            document.getElementById((l+2)+''+c),
+            document.getElementById((l+3)+''+c))) return true;
+
+        // Vérifier horizontal (droite)
+        if (test(case1,
+            document.getElementById(l+''+(c+1)),
+            document.getElementById(l+''+(c+2)),
+            document.getElementById(l+''+(c+3)))) return true;
+
+        // Vérifier diagonale vers bas-droit ↘
+        if (test(case1,
+            document.getElementById((l+1)+''+(c+1)),
+            document.getElementById((l+2)+''+(c+2)),
+            document.getElementById((l+3)+''+(c+3)))) return true;
+
+        // Vérifier diagonale vers haut-droit ↗
+        if (test(case1,
+            document.getElementById((l-1)+''+(c+1)),
+            document.getElementById((l-2)+''+(c+2)),
+            document.getElementById((l-3)+''+(c+3)))) return true;
+    }
+
+    return false; // Pas de victoire trouvée
+}    
+
+// Anime la descente d'un pion colonne par colonne
+function animerDescente(col, couleur, callback){
+    // Trouver la position cible (première case libre en bas)
+    let target = null;
+    for (let l = 6; l >= 1; l--){
+        let cell = document.getElementById(l+""+col);
+        if (!cell.classList.contains('rouge') && !cell.classList.contains('jaune')){
+            target = l;
+            break;
+        }
+    }
+    if (target === null) return; // Colonne pleine
+
+    let ligne = 1; // Commencer du haut
+
+    // Fonction récursive pour l'animation pas à pas
+    function etape(){
+        let cell = document.getElementById(ligne+""+col);
+        cell.classList.add(couleur); // Colorer cette case
+
+        // Effacer la case précédente pour créer l'effet de "chute"
+        if (ligne > 1){
+            let prev = document.getElementById((ligne-1)+""+col);
+            prev.classList.remove(couleur);
+        }
+
+        // Si on a atteint la cible, fin de l'animation et callback
+        if (ligne === target){
+            callback(target);
+        } else {
+            // Continuer l'animation
+            ligne++;
+            setTimeout(etape, 100); // Attendre 100ms avant la prochaine étape
+        }
+    }
+
+    etape(); // Démarrer l'animation
+}
+
+// Joue un coup dans une colonne (utilisé par l'IA et le joueur vs IA)
+function jouerColonne(col){
+    if (jeuFini) return; // Ignorer si le jeu est fini
+
+    // Trouver la première case libre en bas de la colonne
+    let cible = null;
+    for(let l=6;l>=1;l--){
+        let cell=document.getElementById(l+""+col);
+        if(!cell.classList.contains("rouge") && !cell.classList.contains("jaune")){
+            cible = l;
+            break;
+        }
+    }
+
+    if (cible === null) return; // Colonne pleine
+
+    let couleur = tour; // Couleur du joueur actuel
+
+    // Animer la descente et vérifier la victoire
+    animerDescente(col, couleur, function(){
+        // Vérifier si le coup crée une victoire
+        if (verifier(couleur)){
+            victoire(couleur);
+            return;
+        }
+
+        // Passer au joueur suivant
+        tour = (couleur==="rouge") ? "jaune" : "rouge";
+
+        // Si c'est au tour de l'IA, la faire jouer
+        if (tour === joueurIA){
+            setTimeout(jouerIA, 50); // Attendre 50ms avant qu'l'IA joue
+        }
+    });
+}
+
+/**
+ * Stratégie de l'IA pour choisir le meilleur coup
+ * Cette fonction implémente une hiérarchie de décisions pour l'IA :
+ * 1. Cherche d'abord à gagner immédiatement
+ * 2. Bloque la victoire immédiate du joueur
+ * 3. Tente de créer une fourche (deux menaces simultanées)
+ * 4. Bloque les fourches adverses
+ * 5. Utilise l'algorithme minimax pour explorer les meilleurs coups
+ */
+function jouerIA(){
+    if (jeuFini) return;
+
+    // 1. GAGNER
+    for (let col of ordre){
+        let l = poserTemp(col,"jaune");
+        if (l !== null && verifier("jaune")){
+            retirerTemp(l,col);
+            jouerColonne(col);
+            return;
+        }
+        if (l !== null) retirerTemp(l,col);
+    }
+
+    // 2. BLOQUER
+    for (let col of ordre){
+        let l = poserTemp(col,"rouge");
+        if (l !== null && verifier("rouge")){
+            retirerTemp(l,col);
+            jouerColonne(col);
+            return;
+        }
+        if (l !== null) retirerTemp(l,col);
+    }
+
+    // 3. CRÉER UNE FOURCHE
+    for (let col of ordre){
+        if (detecterFourche(col,"jaune")){
+            jouerColonne(col);
+            return;
+        }
+    }
+
+    // 4. BLOQUER FOURCHE ADVERSE
+    for (let col of ordre){
+        if (detecterFourche(col,"rouge")){
+            jouerColonne(col);
+            return;
+        }
+    }
+
+    // 5. MINIMAX
+    let col = minimaxRoot(5);
+
+    if (col === null){ //Eviter bug en fin de partie
+    // jouer première colonne dispo
+    for (let c of ordre){
+        if (colDisponible(c)){
+            col = c;
+            break;
+        }
+    }
+}
+    jouerColonne(col);
+}
+/**
+ * Racine de l'algorithme minimax
+ * Teste tous les coups possibles en évaluant le meilleur coup que l'IA peut jouer
+ * Chaque coup est évalué en simulant un jeu complet jusqu'à une profondeur donnée
+ * Retourne la colonne qui produit le meilleur score pour l'IA
+ * Paramètre :
+ * profondeur(int) - La profondeur d'exploration de l'arbre de jeu
+ * return(int) : la colonne où doit jouer l'IA
+ */
+function minimaxRoot(profondeur){
+
+    let meilleurScore = -Infinity; // Score initial très faible
+    let meilleurCol = null; // Meilleure colonne trouvée
+
+    // Tester chaque colonne dans l'ordre de priorité
+    for(let col of ordre){
+
+        if (!colDisponible(col)) continue; // Passer si la colonne est pleine
+        if (coupPerdant(col)) continue; // Éviter les coups qui font perdre immédiatement
+
+        // Placer temporairement le pion de l'IA
+        let l = poserTemp(col,"jaune");
+        if (l === null) continue;
+
+        // Calculer le score avec minimax (tour du joueur adversaire après)
+        let score = minimax(profondeur-1, false, -Infinity, Infinity);
+
+        retirerTemp(l,col); // Annuler le coup temporaire
+
+        // Mettre à jour si c'est le meilleur score
+        if (score > meilleurScore){
+            meilleurScore = score;
+            meilleurCol = col;
+        }
+    }
+
+    return meilleurCol; // Retourner la meilleure colonne trouvée
+}
+/*
+ * Algorithme minimax avec élagage alpha-bêta :
+ * Il faut voir cet algorithme comme une simulation de tous les coups possibles à partir de la position actuelle, en alternant entre les coups de l'IA (maximisation) et les coups du joueur (minimisation).
+ * La décision est simulée à travers l'arbre de jeu.
+ * Chaque nœud de l'arbre représente une position du jeu après un coup, et les feuilles de l'arbre sont évaluées pour déterminer si elles sont favorables à l'IA ou au joueur.
+ * Explore récursivement l'arbre de jeu en alternant entre les nœuds de maximisation (IA) et minimisation (joueur)
+ * Les victoires immédates et les positions statiques sont évaluées aux feuilles de l'arbre
+ * A chaque décision possible, l'IA lui attribue un score basé sur l'évaluation de la position résultante, et choisit le coup qui maximise son score tout en simulant que l'adversaire joue de manière optimale pour minimiser ce score
+ * La position avec le plus haut score est choisi
+ * Paramètres :
+ * depth (int) - Profondeur restante à explorer
+ * isMaximizing (booléen) - true si c'est le tour de l'IA (maximisation), false si c'est le tour du joueur (minimisation)
+ * alpha (int) - Meilleure valeur trouvée pour le joueur maximisant (IA) jusqu'à présent
+ * beta (int) - Meilleure valeur trouvée pour le joueur minimisant (joueur) jusqu'à présent
+ */
+function minimax(depth, isMaximizing, alpha, beta){
+
+    // Cas terminal : vérifier les victoires
+    if (verifier("jaune")) return 100000 - depth; // IA gagne (moins la profondeur = gagne plus vite)
+    if (verifier("rouge")) return -100000 + depth; // Joueur gagne (moins bon pour l'IA)
+
+    // Cas terminal : profondeur atteinte
+    if (depth === 0){
+        return evaluation(); // Évaluer statiquement la position
+    }
+
+    // Nœud de maximisation - tour de l'IA (veut le score maximum)
+    if (isMaximizing){
+
+        let maxEval = -Infinity;
+
+        for(let col of ordre){
+
+            if (!colDisponible(col)) continue; // Passer si colonne pleine
+
+            let l = poserTemp(col,"jaune"); // Placer un pion temporaire de l'IA
+            if (l === null) continue;
+
+            let score = minimax(depth-1, false, alpha, beta); // Évaluer le tour adverse
+
+            retirerTemp(l,col); // Retirer le pion temporaire
+
+            maxEval = Math.max(maxEval, score); // Garder le score max
+            alpha = Math.max(alpha, score); // Mettre à jour alpha
+
+            if (beta <= alpha) break; // Élaguer : cette branche ne sera pas meilleure
+        }
+
+        return maxEval;
+    }
+    else {
+        // Nœud de minimisation - tour du joueur (veut le score minimum)
+        let minEval = Infinity;
+
+        for(let col of ordre){
+
+            if (!colDisponible(col)) continue; // Passer si colonne pleine
+
+            let l = poserTemp(col,"rouge"); // Placer un pion temporaire du joueur
+            if (l === null) continue;
+
+            let score = minimax(depth-1, true, alpha, beta); // Évaluer le tour de l'IA
+
+            retirerTemp(l,col); // Retirer le pion temporaire
+
+            minEval = Math.min(minEval, score); // Garder le score min
+            beta = Math.min(beta, score); // Mettre à jour beta
+
+            if (beta <= alpha) break; // Élaguer : cette branche ne sera pas meilleure
+        }
+
+        return minEval;
+    }
+}
+/**
+ * Évalue statiquement une position sans vérifier la victoire
+ * Analyse la position en donnant des points pour :
+ * - Le contrôle du centre (très avantageux)
+ * - Les alignements potentiels de pions adjacents
+ * - Les configurations menaçantes ou défensives
+ * Cette fonction est appelée aux feuilles de l'arbre minimax quand la profondeur 0 est atteinte
+ * Atrribue un score positif si la position est favorable à l'IA, négatif si elle est favorable au joueur
+ * return (int) Un score qui représente la qualité de la position pour l'IA
+ */
+function evaluation(){
+
+    let score = 0;
+
+    // BONUS CENTRE - La colonne centrale est très avantageuse
+    for(let l=1; l<=6; l++){
+        let cell = document.getElementById(l+"4");
+        if (cell.classList.contains("jaune")) score += 6; // +6 si pion IA
+        if (cell.classList.contains("rouge")) score -= 6; // -6 si pion joueur
+    }
+
+    // ANALYSE DES FENÊTRES DE 4 - Évaluer tous les alignements possibles
+    let cases = document.getElementsByClassName("case");
+
+    for(let i=0;i<cases.length;i++){
+
+        let c1 = cases[i];
+        let l = parseInt(c1.id[0]); // Ligne
+        let c = parseInt(c1.id[1]); // Colonne
+
+        // Quatre directions à analyser
+        let directions = [
+            [1,0],   // Vertical (bas)
+            [0,1],   // Horizontal (droite)
+            [1,1],   // Diagonale (bas-droit)
+            [1,-1]   // Diagonale (bas-gauche)
+        ];
+
+        for (let [dl,dc] of directions){
+
+            // Créer une fenêtre de 4 cases dans la direction
+            let window = [
+                c1,
+                document.getElementById((l+dl)+""+(c+dc)),
+                document.getElementById((l+2*dl)+""+(c+2*dc)),
+                document.getElementById((l+3*dl)+""+(c+3*dc))
+            ];
+
+            if (window.includes(null)) continue; // Ignorer si en dehors du plateau
+
+            score += scoreFenetre(window); // Ajouter le score de cette fenêtre
+        }
+    }
+
+    return score;
+}
+/**
+ * Évalue le potentiel offensif ou défensif d'une fenêtre de 4 cases consécutives
+ * Analysé dans une direction haut-bas, gauche-droite ou diagonale
+ * Donne des points bonus pour les alignements de pions et des points négatifs pour les menaces adverses
+ * Cette fonction est utilisée dans l'évaluation heuristique d'une position
+ * Paramètres :
+ * window (list)- Tableau de 4 éléments DOM représentant une fenêtre de 4 cases
+ * return (int) Un score positif si favorable à l'IA, négatif sinon
+ */
+function scoreFenetre(window){
+
+    // Compter les pions dans la fenêtre
+    let jaune = 0;  // Pions IA
+    let rouge = 0;  // Pions joueur
+    let vide = 0;   // Cases vides
+
+    for(let c of window){
+        if (c.classList.contains("jaune")) jaune++;
+        else if (c.classList.contains("rouge")) rouge++;
+        else vide++;
+    }
+
+    // Victoire
+    if (jaune === 4) return 1000;  // IA gagne
+    if (rouge === 4) return -1000; // Joueur gagne
+
+    // Trois alignés
+    if (jaune === 3 && vide === 1) return 50;   // IA peut gagner
+    if (jaune === 2 && vide === 2) return 10;   // Deux pions IA
+
+    // Défense
+    if (rouge === 3 && vide === 1) return -80;  // Joueur peut gagner (grosse menace)
+    if (rouge === 2 && vide === 2) return -15;  // Deux pions joueur
+
+    return 0; // Pas intéressant
+}
+
+/**
+ * Compte le nombre de pions d'une couleur spécifique dans une colonne donnée
+ * Parcourt de haut en bas les 6 lignes de la colonne et compte les pions du joueur
+ * Paramètres :
+ * col (int) - Numéro de la colonne (1 à 7)
+ * couleur (str) - Classe CSS de la couleur ("jaune" ou "rouge")
+ * return (int) Le nombre de pions de cette couleur dans la colonne
+ */
+function evaluer(col, couleur){
+    let score = 0;
+
+    for(let l=1;l<=6;l++){
+        let c = document.getElementById(l+""+col);
+        if (c.classList.contains(couleur)) score++;
+    }
+
+    return score;
+}
+
+/**
+ * Vérifie si une colonne a une place libre à la première ligne (en haut)
+ * Une colonne est disponible si la case supérieure n'est pas occupée par un pion
+ * Paramètre :
+ * col (int) - Numéro de la colonne (1 à 7)
+ * return (bool) - true si on peut placer un pion dans cette colonne, false sinon
+ */
+function colDisponible(col){
+    let c = document.getElementById("1"+col);
+    return !c.classList.contains("rouge") && !c.classList.contains("jaune");
+}
+
+/**
+ * Place temporairement un pion dans une colonne pour explorer une position hypothétique
+ * Cherche la première ligne libre (de bas en haut) et y place le pion
+ * Utilisé par les algorithmes de recherche pour tester des coups sans les valider définitivement
+ * Paramètres :
+ * col (int) - Numéro de la colonne (1 à 7)
+ * couleur (str) - Classe CSS du pion ("jaune" ou "rouge")
+ * return (int|null) Le numéro de ligne où le pion a été placé, ou null si colonne pleine
+ */
+function poserTemp(col,couleur){
+    for(let l=6;l>=1;l--){
+        let c = document.getElementById(l+""+col);
+        if (!c.classList.contains("rouge") && !c.classList.contains("jaune")){
+            c.classList.add(couleur);
+            return l; // Retourner la ligne où le pion a été placé
+        }
+    }
+    return null; // Colonne pleine
+}
+
+/**
+ * Retire temporairement un pion après avoir testé une position hypothétique
+ * Inverse l'effet de la fonction poserTemp en supprimant les classes de couleur du pion
+ * Utilisé pour explorer différentes branches de l'arbre de jeu
+ * Paramètres :
+ * l (int) - Numéro de ligne du pion à retirer
+ * col (int) - Numéro de colonne du pion à retirer
+ */
+function retirerTemp(l,col){
+    let c = document.getElementById(l+""+col);
+    if (c) c.classList.remove("rouge","jaune");
+}
+
+/**
+ * Vérifie si un joueur a gagné en trouvant 4 pions alignés de sa couleur
+ * Teste les 4 directions possibles : vertical, horizontal, et deux diagonales
+ * Parcourt toutes les cases du plateau et teste chaque position comme point de départ
+ * Paramètre :
+ * couleur (str) - Classe CSS de la couleur à vérifier ("jaune" ou "rouge")
+ * return (bool) - true si 4 pions alignés de cette couleur existent, false sinon
+ */
+function verifier(couleur){
+
+    let cases = document.getElementsByClassName("case");
+
+    // Parcourir toutes les cases
+    for(let i=0;i<cases.length;i++){
+
+        let c1 = cases[i];
+        let l = parseInt(c1.id[0]); // Ligne
+        let c = parseInt(c1.id[1]); // Colonne
+
+        // Teste si 4 cases contiennent la même couleur
+        function ok(c2,c3,c4){
+            return c1 && c2 && c3 && c4 &&
+            c1.classList.contains(couleur) &&
+            c2.classList.contains(couleur) &&
+            c3.classList.contains(couleur) &&
+            c4.classList.contains(couleur);
+        }
+
+        // Tester vertical
+        if(ok(
+            document.getElementById((l+1)+""+c),
+            document.getElementById((l+2)+""+c),
+            document.getElementById((l+3)+""+c))) return true;
+
+        // Tester horizontal
+        if(ok(
+            document.getElementById(l+""+(c+1)),
+            document.getElementById(l+""+(c+2)),
+            document.getElementById(l+""+(c+3)))) return true;
+
+        // Tester diagonale bas-droit
+        if(ok(
+            document.getElementById((l+1)+""+(c+1)),
+            document.getElementById((l+2)+""+(c+2)),
+            document.getElementById((l+3)+""+(c+3)))) return true;
+
+        // Tester diagonale haut-droit
+        if(ok(
+            document.getElementById((l-1)+""+(c+1)),
+            document.getElementById((l-2)+""+(c+2)),
+            document.getElementById((l-3)+""+(c+3)))) return true;
+    }
+
+    return false; // Pas de victoire
+}
+
+/**
+ * Affiche un message de victoire en superposition sur le plateau de jeu
+ * Paramètre :
+ * joueur (str) - Nom du gagnant ("jaune" ou "rouge")
+ */
+function affichermessage(joueur){
+    let box = document.getElementById("victoire"); // Panneau en superposition
+    let msg = document.getElementById("message_victoire"); // Message texte
+
+    msg.textContent = "Victoire " + joueur; // Afficher le gagnant
+
+    box.style.display = "flex"; // Montrer le panneau
+}
+
+/**
+ * Gère la fin du jeu lors d'une victoire
+ * Bloque tous les coups supplémentaires en mettant jeuFini à true
+ * Affiche le message de victoire à l'écran
+ * Paramètre :
+ * joueur (str) - Couleur du gagnant ("jaune" ou "rouge")
+ */
+function victoire(joueur){
+    jeuFini = true; // Bloquer les coups
+    affichermessage(joueur); // Afficher le message
+}
+
+
+
+/**
+ * Teste si un coup de l'IA permet au joueur d'obtenir une victoire immédiate au coup suivant
+ * Simule le coup de l'IA puis teste tous les coups possibles du joueur après
+ * Si le joueur peut gagner avec l'un de ses coups, ce coup de l'IA est un coup perdant
+ * Paramètre :
+ * col (int) - Colonne où l'IA envisage de placer son pion
+ * return (bool) - true si ce coup perd immédiatement (victoire joueur au coup suivant), false sinon
+ */
+function coupPerdant(col){
+
+    let l = poserTemp(col,"jaune"); // Placer temporairement le pion de l'IA
+    if (l === null) return true; // Colonne pleine = coup invalide
+
+    // Tester tous les coups que le joueur pourrait faire après
+    for(let c=1;c<=7;c++){
+
+        if (!colDisponible(c)) continue; // Passer si colonne pleine
+
+        let l2 = poserTemp(c,"rouge"); // Placer temporairement pion joueur
+
+        // Si le joueur gagne avec ce coup, alors notre coup était mauvais
+        if (l2 !== null && verifier("rouge")){
+            retirerTemp(l2,c);
+            retirerTemp(l,col);
+            return true; // Coup perdant
+        }
+
+        if (l2 !== null) retirerTemp(l2,c);
+    }
+
+    retirerTemp(l,col);
+    return false; // Coup sûr
+}
+
+
+
+/**
+ * Détecte si un coup crée une fourche (deux menaces de victoire simultanées)
+ * Simule le coup puis teste tous les coups suivants possibles
+ * Compte combien de ces coups suivants créeraient une victoire immédiate
+ * Paramètres :
+ * col (int) - Colonne où le pion serait placé
+ * couleur (str) - Couleur du pion ("jaune" ou "rouge")
+ * return (bool) - true si ce coup crée une fourche (2+ menaces simultanées), false sinon
+ */
+function detecterFourche(col, couleur){
+
+    let l = poserTemp(col, couleur);
+    if (l === null) return false;
+
+    let menaces = 0;
+
+    // tester tous les coups suivants
+    for (let c=1; c<=7; c++){
+
+        if (!colDisponible(c)) continue;
+
+        let l2 = poserTemp(c, couleur);
+
+        if (l2 !== null && verifier(couleur)){
+            menaces++;
+        }
+
+        if (l2 !== null) retirerTemp(l2, c);
+    }
+
+    retirerTemp(l, col);
+
+    return menaces >= 2;
+}
+</script>
+
+</body>
+</html>
