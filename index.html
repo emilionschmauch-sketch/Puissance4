@@ -69,15 +69,6 @@ button {
     font-size:30px;
 }
 </style>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-X2C32993PJ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-X2C32993PJ');
-</script>
 </head>
 
 <body>
@@ -91,7 +82,7 @@ button {
 </label>
 <label>
     <input type="radio" name="ia" value="ia" onclick="initialisation()">
-    Joueur vs IA (jusqu'aujourd'hui invaincu)
+    Joueur vs IA
 </label>
 <div id="qui_commence">
 
@@ -108,6 +99,26 @@ button {
 <br>
 <button onclick="initialisation()">Recommencer</button>
 
+<br><br>
+
+<div id="replay_controls" style="display:none;">
+    <button onclick="rejouerPartie()">Revoir la partie</button>
+    
+    <br><br>
+    
+    <label>Vitesse replay :</label>
+    <input
+        type="range"
+        id="speedSlider"
+        min="200"
+        max="2000"
+        step="100"
+        value="800"
+    >
+    
+    <span id="speedValue">0.8s</span>
+</div>
+
 <div id="victoire" onclick="this.style.display='none'">
     <div id="message_victoire"></div>
 </div>
@@ -119,6 +130,8 @@ let tour = "rouge"; // Couleur du joueur actuel
 let joueurIA = "jaune"; // Couleur de l'IA
 let jeuFini = false; // Indicateur de fin de jeu
 let ordre = [4,3,5,2,6,1,7]; // Ordre de priorité des colonnes pour l'IA
+let historique = [];
+let modeReplay = false;
 
 
 
@@ -127,13 +140,26 @@ initialisation();
 
 // Initialise ou réinitialise le jeu
 function initialisation() { // Fonction qui initialise ou réinitialise le jeu
+
+    jeuFini = false; // Réinitialiser l'indicateur de fin de jeu
+    historique = []; // Réinitialiser l'historique des coups
+
+document.addEventListener("input", function(e){
+    if(e.target.id === "speedSlider"){
+        document.getElementById("speedValue").textContent =
+            (e.target.value / 1000) + "s";
+    }
+});
+
+document.getElementById("replay_controls").style.display = "none";
+
     if (document.querySelector('input[name="ia"]:checked').value === "ia"){ // Si l'IA est activée
     document.getElementById("qui_commence").style.display = "block"; // Afficher la section de choix du starter
 }
 else {
     document.getElementById("qui_commence").style.display = "none"; // Masquer la section de choix du joueur qui commence
 }
-    jeuFini = false; // Réinitialiser l'indicateur de fin de jeu
+    
 
     let choix = document.querySelector('input[name="starter"]:checked').value; // Récupérer la valeur du choix du joueur qui commence
 
@@ -199,6 +225,13 @@ function jouer(event) {
     if (cible === null) return; // Colonne pleine, ignorer
 
     let couleur = tour;
+
+if(!modeReplay){
+    historique.push({
+        col: col,
+        couleur: couleur
+    });
+}
 
     // Animer la descente du pion et vérifier s'il y a victoire
     animerDescente(col, couleur, function() {
@@ -317,37 +350,46 @@ function animerDescente(col, couleur, callback){
 
 // Joue un coup dans une colonne (utilisé par l'IA et le joueur vs IA)
 function jouerColonne(col){
-    if (jeuFini) return; // Ignorer si le jeu est fini
 
-    // Trouver la première case libre en bas de la colonne
+    if (jeuFini) return;
+
     let cible = null;
+
     for(let l=6;l>=1;l--){
         let cell=document.getElementById(l+""+col);
-        if(!cell.classList.contains("rouge") && !cell.classList.contains("jaune")){
+
+        if(!cell.classList.contains("rouge") &&
+           !cell.classList.contains("jaune")){
+
             cible = l;
             break;
         }
     }
 
-    if (cible === null) return; // Colonne pleine
+    if (cible === null) return;
 
-    let couleur = tour; // Couleur du joueur actuel
+    let couleur = tour;
 
-    // Animer la descente et vérifier la victoire
+    // AJOUTER CE BLOC
+    if(!modeReplay){
+        historique.push({
+            col: col,
+            couleur: couleur
+        });
+    }
+
     animerDescente(col, couleur, function(){
-        // Vérifier si le coup crée une victoire
+
         if (verifier(couleur)){
             victoire(couleur);
             return;
         }
 
-        // Passer au joueur suivant
         tour = (couleur==="rouge") ? "jaune" : "rouge";
 
-        // Si c'est au tour de l'IA, la faire jouer
-        if (tour === joueurIA){
-            setTimeout(jouerIA, 50); // Attendre 50ms avant qu'l'IA joue
-        }
+        if (tour === joueurIA && !modeReplay){
+    setTimeout(jouerIA, 50);
+}
     });
 }
 
@@ -384,18 +426,18 @@ function jouerIA(){
         }
         if (l !== null) retirerTemp(l,col);
     }
-
-    // 3. CRÉER UNE FOURCHE
-    for (let col of ordre){
-        if (detecterFourche(col,"jaune")){
-            jouerColonne(col);
-            return;
-        }
+// 3. CRÉER UNE FOURCHE
+for (let col of ordre){
+    if (detecterFourche(col,"jaune")&& !coupPerdant(col)){
+        jouerColonne(col);
+        return;
     }
+}
+
 
     // 4. BLOQUER FOURCHE ADVERSE
     for (let col of ordre){
-        if (detecterFourche(col,"rouge")){
+        if (detecterFourche(col,"rouge")&& !coupPerdant(col)){
             jouerColonne(col);
             return;
         }
@@ -764,6 +806,8 @@ function affichermessage(joueur){
 function victoire(joueur){
     jeuFini = true; // Bloquer les coups
     affichermessage(joueur); // Afficher le message
+
+    document.getElementById("replay_controls").style.display = "block";
 }
 
 
@@ -778,30 +822,38 @@ function victoire(joueur){
  */
 function coupPerdant(col){
 
-    let l = poserTemp(col,"jaune"); // Placer temporairement le pion de l'IA
-    if (l === null) return true; // Colonne pleine = coup invalide
+    let l = poserTemp(col,"jaune");
 
-    // Tester tous les coups que le joueur pourrait faire après
+    if(l === null) return true;
+
+    
+
     for(let c=1;c<=7;c++){
 
-        if (!colDisponible(c)) continue; // Passer si colonne pleine
+        if(!colDisponible(c)) continue;
 
-        let l2 = poserTemp(c,"rouge"); // Placer temporairement pion joueur
+        let l2 = poserTemp(c,"rouge");
 
-        // Si le joueur gagne avec ce coup, alors notre coup était mauvais
-        if (l2 !== null && verifier("rouge")){
-            retirerTemp(l2,c);
-            retirerTemp(l,col);
-            return true; // Coup perdant
+        if(l2 !== null){
+
+            // victoire immédiate
+            if(verifier("rouge")){
+                retirerTemp(l2,c);
+                retirerTemp(l,col);
+                return true;
+            }
+
+           
         }
 
-        if (l2 !== null) retirerTemp(l2,c);
+        if(l2 !== null){
+            retirerTemp(l2,c);
+        }
     }
 
     retirerTemp(l,col);
-    return false; // Coup sûr
+    return false;
 }
-
 
 
 /**
@@ -837,6 +889,66 @@ function detecterFourche(col, couleur){
     retirerTemp(l, col);
 
     return menaces >= 2;
+}
+
+function rejouerPartie(){
+
+    if(historique.length === 0) return;
+
+    let coups = [...historique];
+
+    modeReplay = true;
+    jeuFini = true; // bloquer tous les clics
+    tour = null; // empêcher l'IA de rejouer seule
+
+    // reset visuel uniquement
+    document.querySelectorAll(".case").forEach(c=>{
+        c.classList.remove("rouge","jaune");
+    });
+
+    document.getElementById("victoire").style.display = "none";
+
+    let vitesse = parseInt(
+        document.getElementById("speedSlider").value
+    );
+
+    vitesse = Math.max(vitesse,700);
+
+    let i = 0;
+
+    function jouerReplay(){
+
+        if(i >= coups.length){
+            modeReplay = false;
+            jeuFini = false;
+            return;
+        }
+
+        let coup = coups[i];
+
+        console.log("Replay coup :", coup);
+
+        animerDescente(
+            coup.col,
+            coup.couleur,
+            function(){
+
+                i++;
+
+                setTimeout(function(){
+                    jouerReplay();
+                }, vitesse);
+
+            }
+        );
+    }
+
+    jouerReplay();
+    if(i >= coups.length){
+    modeReplay = false;
+    jeuFini = false;
+    return;
+}
 }
 </script>
 
