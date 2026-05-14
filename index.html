@@ -132,7 +132,74 @@ let jeuFini = false; // Indicateur de fin de jeu
 let ordre = [4,3,5,2,6,1,7]; // Ordre de priorité des colonnes pour l'IA
 let historique = [];
 let modeReplay = false;
+const ROWS = 6;
+const COLS = 7;
+let board = [];
 
+function initBoard(){
+    board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+}
+
+function isColAvailable(boardState, col){
+    return boardState[0][col-1] === null;
+}
+
+function getLowestEmptyRow(boardState, col){
+    for (let r = ROWS - 1; r >= 0; r--) {
+        if (boardState[r][col-1] === null) return r;
+    }
+    return -1;
+}
+
+function placeTempBoard(boardState, col, couleur){
+    let row = getLowestEmptyRow(boardState, col);
+    if (row === -1) return -1;
+    boardState[row][col-1] = couleur;
+    return row;
+}
+
+function removeTempBoard(boardState, row, col){
+    if (row >= 0 && row < ROWS) {
+        boardState[row][col-1] = null;
+    }
+}
+
+function verifierBoard(boardState, couleur){
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (boardState[r][c] !== couleur) continue;
+
+            if (r + 3 < ROWS &&
+                boardState[r+1][c] === couleur &&
+                boardState[r+2][c] === couleur &&
+                boardState[r+3][c] === couleur) {
+                return true;
+            }
+
+            if (c + 3 < COLS &&
+                boardState[r][c+1] === couleur &&
+                boardState[r][c+2] === couleur &&
+                boardState[r][c+3] === couleur) {
+                return true;
+            }
+
+            if (r + 3 < ROWS && c + 3 < COLS &&
+                boardState[r+1][c+1] === couleur &&
+                boardState[r+2][c+2] === couleur &&
+                boardState[r+3][c+3] === couleur) {
+                return true;
+            }
+
+            if (r - 3 >= 0 && c + 3 < COLS &&
+                boardState[r-1][c+1] === couleur &&
+                boardState[r-2][c+2] === couleur &&
+                boardState[r-3][c+3] === couleur) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 
 // Lancer le jeu
@@ -143,6 +210,7 @@ function initialisation() { // Fonction qui initialise ou réinitialise le jeu
 
     jeuFini = false; // Réinitialiser l'indicateur de fin de jeu
     historique = []; // Réinitialiser l'historique des coups
+    initBoard();
 
 document.addEventListener("input", function(e){
     if(e.target.id === "speedSlider"){
@@ -225,6 +293,7 @@ function jouer(event) {
     if (cible === null) return; // Colonne pleine, ignorer
 
     let couleur = tour;
+    board[cible-1][col-1] = couleur;
 
 if(!modeReplay){
     historique.push({
@@ -369,8 +438,8 @@ function jouerColonne(col){
     if (cible === null) return;
 
     let couleur = tour;
+    board[cible-1][col-1] = couleur;
 
-    // AJOUTER CE BLOC
     if(!modeReplay){
         historique.push({
             col: col,
@@ -391,6 +460,136 @@ function jouerColonne(col){
     setTimeout(jouerIA, 50);
 }
     });
+}
+
+function getWindow(boardState, row, col, dr, dc){
+    let window = [];
+    for (let k = 0; k < 4; k++) {
+        let r = row + dr*k;
+        let c = col + dc*k;
+        if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return null;
+        window.push(boardState[r][c]);
+    }
+    return window;
+}
+
+function scoreFenetre(window){
+    let jaune = 0;
+    let rouge = 0;
+    let vide = 0;
+
+    for (let c of window) {
+        if (c === "jaune") jaune++;
+        else if (c === "rouge") rouge++;
+        else vide++;
+    }
+
+    if (jaune === 4) return 1000;
+    if (rouge === 4) return -1000;
+    if (jaune === 3 && vide === 1) return 50;
+    if (jaune === 2 && vide === 2) return 10;
+    if (rouge === 3 && vide === 1) return -80;
+    if (rouge === 2 && vide === 2) return -15;
+    return 0;
+}
+
+function evaluation(){
+    let score = 0;
+
+    for (let r = 0; r < ROWS; r++) {
+        let cell = board[r][3];
+        if (cell === "jaune") score += 6;
+        if (cell === "rouge") score -= 6;
+    }
+
+    let directions = [
+        [1,0],
+        [0,1],
+        [1,1],
+        [1,-1]
+    ];
+
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            for (let [dr, dc] of directions) {
+                let window = getWindow(board, r, c, dr, dc);
+                if (!window) continue;
+                score += scoreFenetre(window);
+            }
+        }
+    }
+
+    return score;
+}
+
+function minimaxRoot(profondeur){
+    let meilleurScore = -Infinity;
+    let meilleurCol = null;
+
+    for (let col of ordre) {
+        if (!isColAvailable(board, col)) continue;
+        if (coupPerdant(col)) continue;
+
+        let l = placeTempBoard(board, col, "jaune");
+        if (l === -1) continue;
+
+        let score = minimax(profondeur-1, false, -Infinity, Infinity);
+        removeTempBoard(board, l, col);
+
+        if (score > meilleurScore) {
+            meilleurScore = score;
+            meilleurCol = col;
+        }
+    }
+
+    return meilleurCol;
+}
+
+function minimax(depth, isMaximizing, alpha, beta){
+    if (verifierBoard(board, "jaune")) return 100000 - depth;
+    if (verifierBoard(board, "rouge")) return -100000 + depth;
+
+    if (depth === 0) {
+        return evaluation();
+    }
+
+    if (isMaximizing) {
+        let maxEval = -Infinity;
+
+        for (let col of ordre) {
+            if (!isColAvailable(board, col)) continue;
+
+            let l = placeTempBoard(board, col, "jaune");
+            if (l === -1) continue;
+
+            let score = minimax(depth-1, false, alpha, beta);
+            removeTempBoard(board, l, col);
+
+            maxEval = Math.max(maxEval, score);
+            alpha = Math.max(alpha, score);
+            if (beta <= alpha) break;
+        }
+
+        return maxEval;
+    } else {
+        let minEval = Infinity;
+
+        for (let col of ordre) {
+            if (!isColAvailable(board, col)) continue;
+
+            let l = placeTempBoard(board, col, "rouge");
+            if (l === -1) continue;
+
+            let score = minimax(depth-1, true, alpha, beta);
+            removeTempBoard(board, l, col);
+
+            minEval = Math.min(minEval, score);
+            beta = Math.min(beta, score);
+            if (beta <= alpha) break;
+        }
+
+        return minEval;
+    }
 }
 
 /**
@@ -435,16 +634,9 @@ for (let col of ordre){
 }
 
 
-    // 4. BLOQUER FOURCHE ADVERSE
-    for (let col of ordre){
-        if (detecterFourche(col,"rouge")&& !coupPerdant(col)){
-            jouerColonne(col);
-            return;
-        }
-    }
 
     // 5. MINIMAX
-    let col = minimaxRoot(5);
+    let col = minimaxRoot(7); // Profondeur de recherche
 
     if (col === null){ //Eviter bug en fin de partie
     // jouer première colonne dispo
@@ -456,210 +648,6 @@ for (let col of ordre){
     }
 }
     jouerColonne(col);
-}
-/**
- * Racine de l'algorithme minimax
- * Teste tous les coups possibles en évaluant le meilleur coup que l'IA peut jouer
- * Chaque coup est évalué en simulant un jeu complet jusqu'à une profondeur donnée
- * Retourne la colonne qui produit le meilleur score pour l'IA
- * Paramètre :
- * profondeur(int) - La profondeur d'exploration de l'arbre de jeu
- * return(int) : la colonne où doit jouer l'IA
- */
-function minimaxRoot(profondeur){
-
-    let meilleurScore = -Infinity; // Score initial très faible
-    let meilleurCol = null; // Meilleure colonne trouvée
-
-    // Tester chaque colonne dans l'ordre de priorité
-    for(let col of ordre){
-
-        if (!colDisponible(col)) continue; // Passer si la colonne est pleine
-        if (coupPerdant(col)) continue; // Éviter les coups qui font perdre immédiatement
-
-        // Placer temporairement le pion de l'IA
-        let l = poserTemp(col,"jaune");
-        if (l === null) continue;
-
-        // Calculer le score avec minimax (tour du joueur adversaire après)
-        let score = minimax(profondeur-1, false, -Infinity, Infinity);
-
-        retirerTemp(l,col); // Annuler le coup temporaire
-
-        // Mettre à jour si c'est le meilleur score
-        if (score > meilleurScore){
-            meilleurScore = score;
-            meilleurCol = col;
-        }
-    }
-
-    return meilleurCol; // Retourner la meilleure colonne trouvée
-}
-/*
- * Algorithme minimax avec élagage alpha-bêta :
- * Il faut voir cet algorithme comme une simulation de tous les coups possibles à partir de la position actuelle, en alternant entre les coups de l'IA (maximisation) et les coups du joueur (minimisation).
- * La décision est simulée à travers l'arbre de jeu.
- * Chaque nœud de l'arbre représente une position du jeu après un coup, et les feuilles de l'arbre sont évaluées pour déterminer si elles sont favorables à l'IA ou au joueur.
- * Explore récursivement l'arbre de jeu en alternant entre les nœuds de maximisation (IA) et minimisation (joueur)
- * Les victoires immédates et les positions statiques sont évaluées aux feuilles de l'arbre
- * A chaque décision possible, l'IA lui attribue un score basé sur l'évaluation de la position résultante, et choisit le coup qui maximise son score tout en simulant que l'adversaire joue de manière optimale pour minimiser ce score
- * La position avec le plus haut score est choisi
- * Paramètres :
- * depth (int) - Profondeur restante à explorer
- * isMaximizing (booléen) - true si c'est le tour de l'IA (maximisation), false si c'est le tour du joueur (minimisation)
- * alpha (int) - Meilleure valeur trouvée pour le joueur maximisant (IA) jusqu'à présent
- * beta (int) - Meilleure valeur trouvée pour le joueur minimisant (joueur) jusqu'à présent
- */
-function minimax(depth, isMaximizing, alpha, beta){
-
-    // Cas terminal : vérifier les victoires
-    if (verifier("jaune")) return 100000 - depth; // IA gagne (moins la profondeur = gagne plus vite)
-    if (verifier("rouge")) return -100000 + depth; // Joueur gagne (moins bon pour l'IA)
-
-    // Cas terminal : profondeur atteinte
-    if (depth === 0){
-        return evaluation(); // Évaluer statiquement la position
-    }
-
-    // Nœud de maximisation - tour de l'IA (veut le score maximum)
-    if (isMaximizing){
-
-        let maxEval = -Infinity;
-
-        for(let col of ordre){
-
-            if (!colDisponible(col)) continue; // Passer si colonne pleine
-
-            let l = poserTemp(col,"jaune"); // Placer un pion temporaire de l'IA
-            if (l === null) continue;
-
-            let score = minimax(depth-1, false, alpha, beta); // Évaluer le tour adverse
-
-            retirerTemp(l,col); // Retirer le pion temporaire
-
-            maxEval = Math.max(maxEval, score); // Garder le score max
-            alpha = Math.max(alpha, score); // Mettre à jour alpha
-
-            if (beta <= alpha) break; // Élaguer : cette branche ne sera pas meilleure
-        }
-
-        return maxEval;
-    }
-    else {
-        // Nœud de minimisation - tour du joueur (veut le score minimum)
-        let minEval = Infinity;
-
-        for(let col of ordre){
-
-            if (!colDisponible(col)) continue; // Passer si colonne pleine
-
-            let l = poserTemp(col,"rouge"); // Placer un pion temporaire du joueur
-            if (l === null) continue;
-
-            let score = minimax(depth-1, true, alpha, beta); // Évaluer le tour de l'IA
-
-            retirerTemp(l,col); // Retirer le pion temporaire
-
-            minEval = Math.min(minEval, score); // Garder le score min
-            beta = Math.min(beta, score); // Mettre à jour beta
-
-            if (beta <= alpha) break; // Élaguer : cette branche ne sera pas meilleure
-        }
-
-        return minEval;
-    }
-}
-/**
- * Évalue statiquement une position sans vérifier la victoire
- * Analyse la position en donnant des points pour :
- * - Le contrôle du centre (très avantageux)
- * - Les alignements potentiels de pions adjacents
- * - Les configurations menaçantes ou défensives
- * Cette fonction est appelée aux feuilles de l'arbre minimax quand la profondeur 0 est atteinte
- * Atrribue un score positif si la position est favorable à l'IA, négatif si elle est favorable au joueur
- * return (int) Un score qui représente la qualité de la position pour l'IA
- */
-function evaluation(){
-
-    let score = 0;
-
-    // BONUS CENTRE - La colonne centrale est très avantageuse
-    for(let l=1; l<=6; l++){
-        let cell = document.getElementById(l+"4");
-        if (cell.classList.contains("jaune")) score += 6; // +6 si pion IA
-        if (cell.classList.contains("rouge")) score -= 6; // -6 si pion joueur
-    }
-
-    // ANALYSE DES FENÊTRES DE 4 - Évaluer tous les alignements possibles
-    let cases = document.getElementsByClassName("case");
-
-    for(let i=0;i<cases.length;i++){
-
-        let c1 = cases[i];
-        let l = parseInt(c1.id[0]); // Ligne
-        let c = parseInt(c1.id[1]); // Colonne
-
-        // Quatre directions à analyser
-        let directions = [
-            [1,0],   // Vertical (bas)
-            [0,1],   // Horizontal (droite)
-            [1,1],   // Diagonale (bas-droit)
-            [1,-1]   // Diagonale (bas-gauche)
-        ];
-
-        for (let [dl,dc] of directions){
-
-            // Créer une fenêtre de 4 cases dans la direction
-            let window = [
-                c1,
-                document.getElementById((l+dl)+""+(c+dc)),
-                document.getElementById((l+2*dl)+""+(c+2*dc)),
-                document.getElementById((l+3*dl)+""+(c+3*dc))
-            ];
-
-            if (window.includes(null)) continue; // Ignorer si en dehors du plateau
-
-            score += scoreFenetre(window); // Ajouter le score de cette fenêtre
-        }
-    }
-
-    return score;
-}
-/**
- * Évalue le potentiel offensif ou défensif d'une fenêtre de 4 cases consécutives
- * Analysé dans une direction haut-bas, gauche-droite ou diagonale
- * Donne des points bonus pour les alignements de pions et des points négatifs pour les menaces adverses
- * Cette fonction est utilisée dans l'évaluation heuristique d'une position
- * Paramètres :
- * window (list)- Tableau de 4 éléments DOM représentant une fenêtre de 4 cases
- * return (int) Un score positif si favorable à l'IA, négatif sinon
- */
-function scoreFenetre(window){
-
-    // Compter les pions dans la fenêtre
-    let jaune = 0;  // Pions IA
-    let rouge = 0;  // Pions joueur
-    let vide = 0;   // Cases vides
-
-    for(let c of window){
-        if (c.classList.contains("jaune")) jaune++;
-        else if (c.classList.contains("rouge")) rouge++;
-        else vide++;
-    }
-
-    // Victoire
-    if (jaune === 4) return 1000;  // IA gagne
-    if (rouge === 4) return -1000; // Joueur gagne
-
-    // Trois alignés
-    if (jaune === 3 && vide === 1) return 50;   // IA peut gagner
-    if (jaune === 2 && vide === 2) return 10;   // Deux pions IA
-
-    // Défense
-    if (rouge === 3 && vide === 1) return -80;  // Joueur peut gagner (grosse menace)
-    if (rouge === 2 && vide === 2) return -15;  // Deux pions joueur
-
-    return 0; // Pas intéressant
 }
 
 /**
@@ -821,37 +809,24 @@ function victoire(joueur){
  * return (bool) - true si ce coup perd immédiatement (victoire joueur au coup suivant), false sinon
  */
 function coupPerdant(col){
+    let l = placeTempBoard(board, col, "jaune");
+    if (l === -1) return true;
 
-    let l = poserTemp(col,"jaune");
+    for (let c = 1; c <= 7; c++) {
+        if (!isColAvailable(board, c)) continue;
 
-    if(l === null) return true;
-
-    
-
-    for(let c=1;c<=7;c++){
-
-        if(!colDisponible(c)) continue;
-
-        let l2 = poserTemp(c,"rouge");
-
-        if(l2 !== null){
-
-            // victoire immédiate
-            if(verifier("rouge")){
-                retirerTemp(l2,c);
-                retirerTemp(l,col);
+        let l2 = placeTempBoard(board, c, "rouge");
+        if (l2 !== -1) {
+            if (verifierBoard(board, "rouge")) {
+                removeTempBoard(board, l2, c);
+                removeTempBoard(board, l, col);
                 return true;
             }
-
-           
-        }
-
-        if(l2 !== null){
-            retirerTemp(l2,c);
+            removeTempBoard(board, l2, c);
         }
     }
 
-    retirerTemp(l,col);
+    removeTempBoard(board, l, col);
     return false;
 }
 
@@ -866,28 +841,21 @@ function coupPerdant(col){
  * return (bool) - true si ce coup crée une fourche (2+ menaces simultanées), false sinon
  */
 function detecterFourche(col, couleur){
-
-    let l = poserTemp(col, couleur);
-    if (l === null) return false;
+    let l = placeTempBoard(board, col, couleur);
+    if (l === -1) return false;
 
     let menaces = 0;
+    for (let c = 1; c <= 7; c++) {
+        if (!isColAvailable(board, c)) continue;
 
-    // tester tous les coups suivants
-    for (let c=1; c<=7; c++){
-
-        if (!colDisponible(c)) continue;
-
-        let l2 = poserTemp(c, couleur);
-
-        if (l2 !== null && verifier(couleur)){
+        let l2 = placeTempBoard(board, c, couleur);
+        if (l2 !== -1 && verifierBoard(board, couleur)) {
             menaces++;
         }
-
-        if (l2 !== null) retirerTemp(l2, c);
+        if (l2 !== -1) removeTempBoard(board, l2, c);
     }
 
-    retirerTemp(l, col);
-
+    removeTempBoard(board, l, col);
     return menaces >= 2;
 }
 
